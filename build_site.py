@@ -6,12 +6,21 @@ interactive HTML course website.
 
 import os
 import re
+import sys
+from typing import Dict, Tuple
 import mistune
 
 # ─── Raw HTML block preservation ─────────────────────────────────────────────
 
-def _extract_html_blocks(text):
-    """Replace raw HTML <div> blocks (including nested) with placeholders."""
+def _extract_html_blocks(text: str) -> Tuple[str, Dict[str, str]]:
+    """Replace raw HTML <div> blocks (including nested) with placeholders.
+
+    Args:
+        text: Markdown text containing HTML blocks
+
+    Returns:
+        Tuple of (processed text with placeholders, dictionary mapping placeholders to original HTML)
+    """
     blocks = {}
     idx = 0
     result = []
@@ -45,8 +54,16 @@ def _extract_html_blocks(text):
         pos = i
     return ''.join(result), blocks
 
-def _restore_html_blocks(html, blocks):
-    """Put the original HTML blocks back, removing any <p> wrapper mistune added."""
+def _restore_html_blocks(html: str, blocks: Dict[str, str]) -> str:
+    """Put the original HTML blocks back, removing any <p> wrapper mistune added.
+
+    Args:
+        html: HTML with placeholders
+        blocks: Dictionary mapping placeholders to original HTML
+
+    Returns:
+        HTML with original blocks restored
+    """
     for key, block in blocks.items():
         html = html.replace(f'<p>{key}</p>', block)
         html = html.replace(key, block)
@@ -59,19 +76,19 @@ COURSE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Ordered list of course files
 COURSE_FILES = [
-    ("Course Overview", "COURSE_OVERVIEW.md"),
-    ("Module 1: Foundations of Agentic AI", "MODULE_01_Foundations.md"),
-    ("Module 2: Goals & Success Metrics", "MODULE_02_Goals_and_Metrics.md"),
-    ("Module 3: Agent System Architecture", "MODULE_03_Architecture.md"),
-    ("Module 4: Amazon Bedrock Deep Dive", "MODULE_04_Bedrock_Deep_Dive.md"),
-    ("Module 5: Knowledge Bases in Bedrock", "MODULE_05_Knowledge_Bases.md"),
-    ("Module 6: MCP Servers", "MODULE_06_MCP_Servers.md"),
-    ("Module 7: Productionizing Agent Systems", "MODULE_07_Productionizing.md"),
-    ("Answer Keys — All Modules", "ANSWER_KEYS.md"),
-    ("Checkpoint Quizzes & Answer Keys", "CHECKPOINT_QUIZZES.md"),
-    ("Practice Exercises", "PRACTICE_EXERCISES.md"),
+    ("Course Overview", "Course Summary/COURSE_OVERVIEW.md"),
+    ("Module 1: Foundations of Agentic AI", "Textbook Chapters/MODULE_01_Foundations.md"),
+    ("Module 2: Goals & Success Metrics", "Textbook Chapters/MODULE_02_Goals_and_Metrics.md"),
+    ("Module 3: Agent System Architecture", "Textbook Chapters/MODULE_03_Architecture.md"),
+    ("Module 4: Amazon Bedrock Deep Dive", "Textbook Chapters/MODULE_04_Bedrock_Deep_Dive.md"),
+    ("Module 5: Knowledge Bases in Bedrock", "Textbook Chapters/MODULE_05_Knowledge_Bases.md"),
+    ("Module 6: MCP Servers", "Textbook Chapters/MODULE_06_MCP_Servers.md"),
+    ("Module 7: Productionizing Agent Systems", "Textbook Chapters/MODULE_07_Productionizing.md"),
+    ("Answer Keys — All Modules", "Quizzes and Assessments/ANSWER_KEYS.md"),
+    ("Checkpoint Quizzes & Answer Keys", "Quizzes and Assessments/CHECKPOINT_QUIZZES.md"),
+    ("Practice Exercises", "Quizzes and Assessments/PRACTICE_EXERCISES.md"),
     ("PowerPoint Slide Deck Outline", "POWERPOINT_OUTLINE.md"),
-    ("Capstone Project & Course Index", "CAPSTONE_AND_INDEX.md"),
+    ("Capstone Project & Course Index", "Quizzes and Assessments/CAPSTONE_AND_INDEX.md"),
 ]
 
 # ─── Syntax highlighting renderer ────────────────────────────────────────────
@@ -87,7 +104,7 @@ class HighlightRenderer(mistune.HTMLRenderer):
         highlighted = highlight(code, lexer, formatter)
         return f'<pre class="code-block"><code>{highlighted}</code></pre>\n'
 
-    def heading(self, text, level, **attrs):
+    def heading(self, text, level, **_attrs):
         # Generate an anchor id from heading text
         raw = re.sub(r'<[^>]+>', '', text)
         anchor = re.sub(r'[^\w\s-]', '', raw).strip().lower()
@@ -962,10 +979,29 @@ window.addEventListener('scroll', () => {{
 
 # ─── Build ────────────────────────────────────────────────────────────────────
 
-def load_md(filename):
+def load_md(filename: str) -> str:
+    """Load a markdown file from the course directory.
+
+    Args:
+        filename: Name of the markdown file to load
+
+    Returns:
+        Content of the markdown file
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        IOError: If there's an error reading the file
+    """
     path = os.path.join(COURSE_DIR, filename)
-    with open(path, encoding='utf-8') as f:
-        return f.read()
+    try:
+        with open(path, encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"❌ Error: File not found: {path}", file=sys.stderr)
+        raise
+    except IOError as e:
+        print(f"❌ Error reading file {path}: {e}", file=sys.stderr)
+        raise
 
 def build():
     md = make_md()
@@ -978,28 +1014,6 @@ def build():
         html_body = md(raw)
         html_body = _restore_html_blocks(html_body, html_blocks)
 
-        # ── Module badge label
-        if idx == 0:
-            badge = "Overview"
-        elif "MODULE_0" in filename:
-            num = filename.split("_")[1]
-            badge = f"Module {int(num)}"
-        elif "QUIZ" in filename:
-            badge = "Quizzes"
-        elif "EXERCISE" in filename:
-            badge = "Exercises"
-        elif "POWER" in filename:
-            badge = "Slides"
-        elif "CAPSTONE" in filename:
-            badge = "Capstone"
-        else:
-            badge = ""
-
-        short_title = title.replace("Module 1: ", "").replace("Module 2: ", "")\
-                           .replace("Module 3: ", "").replace("Module 4: ", "")\
-                           .replace("Module 5: ", "").replace("Module 6: ", "")\
-                           .replace("Module 7: ", "")
-
         # ── Navigation entry
         nav_parts.append(
             f'<div class="nav-section">'
@@ -1011,7 +1025,7 @@ def build():
         active_cls = " active" if idx == 0 else ""
 
         # ── Mark answer keys section for in-page TOC
-        toc_attr = ' data-toc="true"' if filename == "ANSWER_KEYS.md" else ""
+        toc_attr = ' data-toc="true"' if "ANSWER_KEYS.md" in filename else ""
 
         content_parts.append(
             f'<div class="section-panel{active_cls}"{toc_attr} id="section-{idx}">'
@@ -1029,12 +1043,19 @@ def build():
     )
 
     out_path = os.path.join(COURSE_DIR, "index.html")
-    with open(out_path, 'w', encoding='utf-8') as f:
-        f.write(html)
-
-    size_kb = os.path.getsize(out_path) / 1024
-    print(f"✅  Built: {out_path}  ({size_kb:.0f} KB)")
-    return out_path
+    try:
+        with open(out_path, 'w', encoding='utf-8') as f:
+            f.write(html)
+        size_kb = os.path.getsize(out_path) / 1024
+        print(f"✅  Built: {out_path}  ({size_kb:.0f} KB)")
+        return out_path
+    except IOError as e:
+        print(f"❌ Error writing output file {out_path}: {e}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
-    build()
+    try:
+        build()
+    except Exception as e:
+        print(f"❌ Build failed: {e}", file=sys.stderr)
+        sys.exit(1)

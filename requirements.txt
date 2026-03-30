@@ -1,0 +1,3 @@
+# Core dependencies for build_site.py
+mistune>=3.0.0
+Pygments>=2.17.0
